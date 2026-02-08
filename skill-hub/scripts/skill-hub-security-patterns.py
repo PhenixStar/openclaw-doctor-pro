@@ -43,6 +43,52 @@ CODE_PATTERNS = {
         (r"os\.getenv\s*\(", "env variable reading"),
         (r"subprocess.*env\s*=", "env manipulation in subprocess"),
     ],
+    "reverse_shells": [
+        (r"nc\s+.*-e", "netcat reverse shell"),
+        (r"bash\s+-i\s+.*\/dev\/tcp", "bash reverse shell"),
+        (r"\/bin\/sh\s*\|\s*nc", "shell pipe to netcat"),
+        (r"python.*socket.*subprocess", "python reverse shell pattern"),
+        (r"socket\..*connect.*shell", "socket-based shell"),
+        (r"pty\.spawn", "PTY spawn (shell escape)"),
+    ],
+    "curl_pipe_bash": [
+        (r"curl\s+.*\|\s*(ba)?sh", "curl pipe to shell"),
+        (r"wget\s+.*\|\s*(ba)?sh", "wget pipe to shell"),
+        (r"curl\s+.*>\s*.*\.sh\s*&&", "download and execute script"),
+        (r"wget\s+.*&&\s*chmod\s*\+x", "download and make executable"),
+    ],
+    "persistence": [
+        (r"crontab\s+-", "crontab modification"),
+        (r"\/etc\/cron", "system cron access"),
+        (r"systemctl\s+(enable|start)", "systemd service manipulation"),
+        (r"LaunchAgents|LaunchDaemons", "macOS persistence"),
+        (r"\.bashrc|\.zshrc|\.profile", "shell profile modification"),
+    ],
+    "credential_access": [
+        (r"\.ssh[/\\]", "SSH key access"),
+        (r"\.aws[/\\]", "AWS credentials access"),
+        (r"\.openclaw[/\\]credentials", "OpenClaw credentials access"),
+        (r"\.clawdbot.*\.env", "ClawdBot .env access"),
+        (r"private[_-]?key|privatekey", "private key reference"),
+        (r"wallet.*\.dat", "wallet file access"),
+        (r"seed\s*phrase|mnemonic", "seed phrase reference"),
+        (r"metamask|phantom|ledger", "wallet software reference"),
+    ],
+    "privilege_escalation": [
+        (r"chmod\s+777", "world-writable permissions"),
+        (r"setuid|setgid", "setuid/setgid usage"),
+        (r"chown\s+root", "chown to root"),
+    ],
+    "malicious_domains": [
+        (r"glot\.io", "glot.io (known malware host)"),
+        (r"pastebin\.com\/raw", "pastebin raw (code hosting)"),
+        (r"paste\.ee|ghostbin|hastebin", "paste service (code hosting)"),
+        (r"ngrok|localtunnel|serveo", "tunnel service usage"),
+    ],
+    "data_exfiltration_webhooks": [
+        (r"discord\.com\/api\/webhooks", "Discord webhook exfiltration"),
+        (r"hooks\.slack\.com", "Slack webhook exfiltration"),
+    ],
 }
 
 # --- NLP / Prompt injection patterns ---
@@ -109,7 +155,7 @@ def scan_file(file_path, relative_path):
                         "file": str(relative_path),
                         "line": line_num,
                         "category": category,
-                        "severity": "HIGH" if category in ("code_execution", "shell_injection") else "MEDIUM",
+                        "severity": "CRITICAL" if category in ("reverse_shells", "curl_pipe_bash", "credential_access", "data_exfiltration_webhooks") else "HIGH" if category in ("code_execution", "shell_injection", "persistence", "privilege_escalation", "malicious_domains") else "MEDIUM",
                         "description": description,
                         "match": match.group(0)[:60],
                     })
