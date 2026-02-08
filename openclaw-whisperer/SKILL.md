@@ -1,9 +1,9 @@
 ---
-name: openclaw-doctor-pro
+name: openclaw-whisperer
 description: Comprehensive diagnostic, error-fixing, and skill recommendation tool for OpenClaw
 license: MIT
 version: 1.1.0
-homepage: https://github.com/PhenixStar/openclaw-doctor-pro
+homepage: https://github.com/PhenixStar/openclaw-skills-collection
 user-invocable: true
 disable-model-invocation: false
 metadata:
@@ -26,7 +26,7 @@ metadata:
   }
 ---
 
-# OpenClaw Doctor Pro
+# OpenClaw Whisperer
 
 Ultimate diagnostic, error-fixing, and skill recommendation tool for OpenClaw.
 

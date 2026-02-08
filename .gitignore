@@ -26,6 +26,9 @@ data/clawhub-cache.json
 plans/
 .claude/
 
+# Generated files
+references/awesome-catalog.json
+
 # Secrets
 .env
 *.key
