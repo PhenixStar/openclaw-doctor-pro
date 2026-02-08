@@ -7,23 +7,17 @@ homepage: https://github.com/PhenixStar/openclaw-skills-collection
 user-invocable: true
 disable-model-invocation: false
 metadata:
-  {
-    "openclaw": {
-      "emoji": "🏥",
-      "requires": {
-        "bins": ["python3"],
-        "env": []
-      },
-      "install": [
-        {
-          "id": "pip-deps",
-          "kind": "shell",
-          "command": "pip install click rich requests beautifulsoup4",
-          "label": "Install Python dependencies"
-        }
-      ]
-    }
-  }
+  openclaw:
+    emoji: "🏥"
+    requires:
+      bins:
+        - python3
+      env: []
+    install:
+      - id: pip-deps
+        kind: shell
+        command: "pip install click rich requests beautifulsoup4"
+        label: Install Python dependencies
 ---
 
 # OpenClaw Whisperer
