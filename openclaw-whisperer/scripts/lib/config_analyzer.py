@@ -58,13 +58,14 @@ class ConfigAnalyzer:
                     fix_hint="Port must be between 1 and 65535"
                 ))
 
-        auth_mode = gateway.get("authMode")
+        # Support both flat "authMode" and nested "auth.mode" schemas
+        auth_mode = gateway.get("authMode") or (gateway.get("auth", {}).get("mode") if isinstance(gateway.get("auth"), dict) else None)
         if not auth_mode:
             issues.append(ConfigIssue(
                 severity="warning",
                 path="gateway.authMode",
                 message="Auth mode not set",
-                fix_hint="Set authMode to 'token' or 'none' (not recommended for production)"
+                fix_hint="Set gateway.auth.mode or gateway.authMode to 'password', 'token', or 'none'"
             ))
 
         bind = gateway.get("bind")
@@ -83,54 +84,75 @@ class ConfigAnalyzer:
         issues = []
         channels = config.get("channels", {})
 
+        # Map channel -> required fields with alternates (any match = OK)
         required_fields = {
-            "telegram": ["token"],
-            "discord": ["token"],
-            "slack": ["token", "appToken"],
-            "whatsapp": ["dmPolicy"]
+            "telegram": [["token", "botToken"]],  # accept either field name
+            "discord": [["token"]],
+            "slack": [["token"], ["appToken"]],
+            "whatsapp": [["dmPolicy"]]
         }
 
-        for channel_name, required in required_fields.items():
+        for channel_name, field_groups in required_fields.items():
             channel_config = channels.get(channel_name, {})
             enabled = channel_config.get("enabled", False)
+            # Also check nested accounts for credentials
+            accounts = channel_config.get("accounts", {})
 
             if enabled:
-                for field in required:
-                    if not channel_config.get(field):
+                for alternates in field_groups:
+                    # Field present at top level or in any account
+                    found = any(channel_config.get(f) for f in alternates) or any(
+                        acc.get(f) for acc in accounts.values() if isinstance(acc, dict) for f in alternates
+                    )
+                    if not found:
+                        display = "/".join(alternates)
                         issues.append(ConfigIssue(
                             severity="error",
-                            path=f"channels.{channel_name}.{field}",
-                            message=f"Missing required field '{field}' for enabled {channel_name} channel",
-                            fix_hint=f"Add '{field}' to channels.{channel_name} configuration"
+                            path=f"channels.{channel_name}.{display}",
+                            message=f"Missing required field '{display}' for enabled {channel_name} channel",
+                            fix_hint=f"Add one of [{display}] to channels.{channel_name} or its accounts"
                         ))
 
         return issues
 
     def _check_agents(self, config: dict) -> list[ConfigIssue]:
-        """Validate agent configuration."""
+        """Validate agent configuration. Supports both flat and nested schemas."""
         issues = []
+        # Support flat "agent" and nested "agents.defaults" schemas
         agent = config.get("agent", {})
+        agents = config.get("agents", {})
+        defaults = agents.get("defaults", {})
 
+        # Model: flat agent.model OR nested agents.defaults.model.primary
         model = agent.get("model")
         if not model:
+            model_cfg = defaults.get("model", {})
+            model = model_cfg.get("primary") if isinstance(model_cfg, dict) else model_cfg
+        # Also check per-agent models in agents.list
+        agent_list = agents.get("list", [])
+        has_agent_model = any(a.get("model") for a in agent_list if isinstance(a, dict))
+
+        if not model and not has_agent_model:
             issues.append(ConfigIssue(
                 severity="error",
-                path="agent.model",
+                path="agents.defaults.model.primary",
                 message="No AI model configured",
-                fix_hint="Set agent.model to a valid model name (e.g., 'gpt-4', 'claude-3')"
+                fix_hint="Set agents.defaults.model.primary or agent.model"
             ))
 
-        workspace = agent.get("workspace")
+        # Workspace: flat or nested
+        workspace = agent.get("workspace") or defaults.get("workspace")
         if workspace:
             workspace_path = Path(workspace).expanduser()
             if not workspace_path.exists():
                 issues.append(ConfigIssue(
                     severity="warning",
-                    path="agent.workspace",
+                    path="agents.defaults.workspace",
                     message=f"Workspace directory does not exist: {workspace}",
                     fix_hint="Create the directory or update the path"
                 ))
 
+        # Sandbox: flat agent.sandboxMode or per-agent sandbox.mode
         sandbox = agent.get("sandboxMode")
         if sandbox and sandbox not in ["strict", "relaxed", "off"]:
             issues.append(ConfigIssue(
@@ -155,14 +177,14 @@ class ConfigAnalyzer:
         return issues
 
     def _check_plugins(self, config: dict) -> list[ConfigIssue]:
-        """Validate plugins configuration."""
+        """Validate plugins configuration. Accepts array or object with allow/entries."""
         issues = []
-        plugins = config.get("plugins", [])
-        if not isinstance(plugins, list):
+        plugins = config.get("plugins")
+        if plugins is not None and not isinstance(plugins, (list, dict)):
             issues.append(ConfigIssue(
                 severity="error", path="plugins",
-                message="Plugins configuration must be an array",
-                fix_hint="Use [] for plugins section"
+                message="Plugins configuration must be an array or object with allow/entries",
+                fix_hint="Use [] or {\"allow\": [...], \"entries\": {...}}"
             ))
         return issues
 
@@ -172,8 +194,12 @@ class ConfigAnalyzer:
         return [name for name, cfg in channels.items() if cfg.get("enabled", False)]
 
     def detect_model(self) -> str | None:
-        """Get configured AI model name."""
-        return self.config.get("agent", {}).get("model")
+        """Get configured AI model name (flat or nested schema)."""
+        model = self.config.get("agent", {}).get("model")
+        if not model:
+            model_cfg = self.config.get("agents", {}).get("defaults", {}).get("model", {})
+            model = model_cfg.get("primary") if isinstance(model_cfg, dict) else model_cfg
+        return model
 
     def get_config_path(self, path: str):
         """Access config value using dot-notation path."""
